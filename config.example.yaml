@@ -1,0 +1,21 @@
+backup:
+  source: s3://acme-backups/postgres/prod/   # or a local folder: /backups/prod/
+  pattern: "*.dump"                          # pg_dump -Fc files
+  max_backup_age_hours: 26                   # RPO target 24h + slack for the nightly window
+
+restore:
+  admin_dsn_env: RESTORE_ADMIN_DSN           # superuser on the scratch server; never production
+  max_restore_minutes: 45                    # RTO budget for the data-restore step
+  jobs: 4                                    # pg_restore --jobs
+
+expect:
+  tables:
+    customers: { min_rows: 10000, max_shrink_pct: 5, fresh_column: updated_at, max_age_hours: 30 }
+    orders:    { min_rows: 50000, max_shrink_pct: 5, fresh_column: created_at, max_age_hours: 30 }
+    payments:  { min_rows: 50000, max_shrink_pct: 5 }
+  queries:
+    - name: recent orders join customers
+      sql: SELECT count(*) FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.created_at > now() - interval '7 days'
+      min_value: 1
+
+evidence_dir: evidence
